@@ -49,3 +49,13 @@ MODEL_PATH=/path/to/model.gguf uv run inference_worker.py
 ```
 
 The server listens on `0.0.0.0:8080` by default.
+
+## Sample Requests
+
+### Cache a model
+```bash
+curl -X POST http://localhost:8080/cache_model \
+  -H "X-Model-Name: my-model.gguf" \
+  -H "Transfer-Encoding: chunked" \
+  --data-binary @- < inference_worker/model_cache/ggml-org_models_tinyllamas_stories15M-q4_0.gguf
+```
