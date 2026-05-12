@@ -1,8 +1,23 @@
+import os
 from flask import Flask, request, jsonify
+from llama_cpp import Llama
 
 app = Flask(__name__)
 
+llm: Llama | None = None
 
+
+def init_llama():
+    global llm
+    model_path = os.environ.get("MODEL_PATH")
+    if not model_path:
+        print("No model loaded, llama instance not created.")
+        return
+    n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
+    n_ctx = int(os.environ.get("N_CTX", 2048))
+    llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    print("Initialized llama.cpp instance.")
+ 
 @app.route("/load_model_from_store", methods=["POST"])
 def load_model_from_store():
     """
@@ -31,4 +46,5 @@ def cache_model():
 
 
 if __name__ == "__main__":
+    init_llama()
     app.run(host="0.0.0.0", port=8080)
