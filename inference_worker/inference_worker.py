@@ -30,7 +30,25 @@ def load_model_from_store():
     Receive a model file from the model store server.
     Store in memory or disk, then load into GPU via llama.cpp.
     """
-    pass
+    global llm
+    model_name = request.headers.get("X-Model-Name")
+    if not model_name:
+        return jsonify({"error": "X-Model-Name header required"}), 400
+
+    os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
+    model_path = os.path.join(MODEL_CACHE_DIR, model_name)
+
+    with open(model_path, "wb") as f:
+        chunk_size = 1024 * 1024  # 1MB chunks
+        while chunk := request.stream.read(chunk_size):
+            f.write(chunk)
+
+    n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
+    n_ctx = int(os.environ.get("N_CTX", 2048))
+    llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    print(f"Loaded {model_name} into GPU.")
+
+    return jsonify({"status": "loaded", "model": model_name})
 
 
 @app.route("/load_model_from_cache", methods=["POST"])

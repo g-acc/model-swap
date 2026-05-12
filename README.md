@@ -57,5 +57,13 @@ The server listens on `0.0.0.0:8080` by default.
 curl -X POST http://localhost:8080/cache_model \
   -H "X-Model-Name: my-model.gguf" \
   -H "Transfer-Encoding: chunked" \
-  --data-binary @- < inference_worker/model_cache/ggml-org_models_tinyllamas_stories15M-q4_0.gguf
+  --data-binary @- < /path/to/my-model.gguf
+```
+
+### Load a model from store (send file + load into GPU)
+```bash
+curl -X POST http://localhost:8080/load_model_from_store \
+  -H "X-Model-Name: my-model.gguf" \
+  -H "Transfer-Encoding: chunked" \
+  --data-binary @- < /path/to/my-model.gguf
 ```
