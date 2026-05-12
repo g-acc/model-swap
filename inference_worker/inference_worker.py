@@ -1,0 +1,34 @@
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+
+@app.route("/load_model_from_store", methods=["POST"])
+def load_model_from_store():
+    """
+    Receive a model file from the model store server.
+    Store in memory or disk, then load into GPU via llama.cpp.
+    """
+    pass
+
+
+@app.route("/load_model_from_cache", methods=["POST"])
+def load_model_from_cache():
+    """
+    Receive a model name from the model store server.
+    Load the already-cached model into GPU via llama.cpp.
+    """
+    pass
+
+
+@app.route("/cache_model", methods=["POST"])
+def cache_model():
+    """
+    Receive a model file from the model store server.
+    Store on disk (or memory) without loading into GPU.
+    """
+    pass
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
