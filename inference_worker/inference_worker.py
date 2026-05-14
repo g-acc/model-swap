@@ -23,7 +23,9 @@ def init_llama():
     n_ctx = int(os.environ.get("N_CTX", 2048))
     llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
     print(f"Initialized llama.cpp instance with {cached[0]}.")
- 
+
+
+# From Remote Store Server 
 @app.route("/load_model_from_store", methods=["POST"])
 def load_model_from_store():
     """
@@ -35,6 +37,8 @@ def load_model_from_store():
     if not model_name:
         return jsonify({"error": "X-Model-Name header required"}), 400
 
+    # We should check if it already exists here no? 
+    
     os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
     model_path = os.path.join(MODEL_CACHE_DIR, model_name)
 
@@ -50,15 +54,31 @@ def load_model_from_store():
 
     return jsonify({"status": "loaded", "model": model_name})
 
-
+# Local Load
 @app.route("/load_model_from_cache", methods=["POST"])
 def load_model_from_cache():
     """
     Receive a model name from the model store server.
     Load the already-cached model into GPU via llama.cpp.
     """
-    pass
+    global llm
+    model_name = request.headers.get("X-Model-Name")
+    if not model_name:
+        return jsonify({"error": "X-Model-Name header required"}), 400 
+    model_path = os.path.join(MODEL_CACHE_DIR, model_name)
+    
+    # Makes sure you don't load a model that isn't actually there
+    if not os.path.isfile(model_path):
+        return jsonify({"error": "model not found in cache", "model": model_name}), 404
 
+
+    n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
+    n_ctx = int(os.environ.get("N_CTX", 2048))
+    llm = Llama(model_path=model_path,n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    print(f"Loaded {model_name} into GPU.")
+    
+    return jsonify({"status" : "loaded", "model": model_name})
+    
 
 @app.route("/cache_model", methods=["POST"])
 def cache_model():
