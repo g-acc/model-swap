@@ -28,25 +28,33 @@ def user_request():
     if not os.path.isfile(model_path):
         return jsonify({"error": "model not on store", 
                         "model": model}), 404
-    
+
+    evicted = None
+    if worker.loaded == model:
+        worker.touch(model)
+        cache_action = "already_loaded"
+
     elif model in worker.cached:
         worker_client.load_from_cache(worker, model)
         worker.loaded = model
+        worker.touch(model)
         cache_action = "load_from_cache"
 
     else:
         worker_client.load_from_store(worker, model, model_path)
-        worker.cached.add(model)
+        evicted = worker.add_to_cache(model)
         worker.loaded = model
         cache_action = "load_from_store"
 
-    print(f"[/user_request] model={model} action={cache_action} prompt_len ={len(prompt)}")
-
+    log_extra = f" evicted={evicted}" if evicted else ""
+    print(f"[/user_request] model={model} action={cache_action} cached={list(worker.cached)}{log_extra}")
+    
     return jsonify({
         "status": "would_infer",
         "model" : model,
         "worker": worker.url,
         "cache_action": cache_action,
+        "evicted" : evicted,
         "prompt": prompt,
     })
 
