@@ -1,7 +1,8 @@
 import os
 from flask import Flask, request, jsonify
 import config
-
+import worker_client
+from state import worker
 
 app = Flask(__name__)
 
@@ -23,12 +24,30 @@ def user_request():
     if not isinstance(prompt, str) or not isinstance(model, str):
         return jsonify({"error": "prompt and model (strings) are required"}), 400
     
-    # TODO: use actual inference later
+    model_path = os.path.join(config.MODELS_DIR, model)
+    if not os.path.isfile(model_path):
+        return jsonify({"error": "model not on store", 
+                        "model": model}), 404
+    
+    elif model in worker.cached:
+        worker_client.load_from_cache(worker, model)
+        worker.loaded = model
+        cache_action = "load_from_cache"
+
+    else:
+        worker_client.load_from_store(worker, model, model_path)
+        worker.cached.add(model)
+        worker.loaded = model
+        cache_action = "load_from_store"
+
+    print(f"[/user_request] model={model} action={cache_action} prompt_len ={len(prompt)}")
 
     return jsonify({
-        "status": "scaffolding",
+        "status": "would_infer",
+        "model" : model,
+        "worker": worker.url,
+        "cache_action": cache_action,
         "prompt": prompt,
-        "model": model,
     })
 
 if __name__ == "__main__":
