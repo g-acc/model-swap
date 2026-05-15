@@ -1,35 +1,35 @@
 import os
 from flask import Flask, request, jsonify
-from llama_cpp import Llama
+import config
+
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = None  # no size limit for large model files
 
-MODEL_CACHE_DIR = "./model_cache"
+if os.path.isdir(config.MODELS_DIR):
+    available_models = [f for f in os.listdir(config.MODELS_DIR) if f.endswith(".gguf")]
+else:
+    available_models = []
 
-llm: Llama | None = None
+print("Model Store Server")
+print(f"  MODELS_DIR: {config.MODELS_DIR}")
+print(f"  Available models: {available_models}")
+print(f"  Worker URL: {config.WORKER_URL}")
 
-
-def init_server():
-    """
-    Finds models and workers
-    """
-    pass
-
+@app.route("/user_request", methods=["POST"])
 def user_request():
-    """
-    Recieves user request (prompt and model)
-    Forwards to worker
-    """
-    pass
-
-def inference_resposne():
-    """
-    Recieves result from worker 
-    Forwards to user
-    """
+    body = request.get_json(silent=True) or {}
+    prompt = body.get("prompt")
+    model = body.get("model")
+    if not isinstance(prompt, str) or not isinstance(model, str):
+        return jsonify({"error": "prompt and model (strings) are required"}), 400
     
-    pass
+    # TODO: use actual inference later
 
-if __name__ == "__main__ ":
-    init_server();
+    return jsonify({
+        "status": "scaffolding",
+        "prompt": prompt,
+        "model": model,
+    })
+
+if __name__ == "__main__":
+      app.run(host="0.0.0.0", port=8000)
