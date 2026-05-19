@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from llama_cpp import Llama
 
 app = Flask(__name__)
@@ -8,10 +8,11 @@ app.config["MAX_CONTENT_LENGTH"] = None  # no size limit for large model files
 MODEL_CACHE_DIR = "./model_cache"
 
 llm: Llama | None = None
+loaded_model_name: str | None = None
 
 
 def init_llama():
-    global llm
+    global llm, loaded_model_name
     cached = [f for f in os.listdir(MODEL_CACHE_DIR) if f.endswith(".gguf")] if os.path.isdir(MODEL_CACHE_DIR) else []
     if not cached:
         print("No model found in cache, llama instance not created.")
@@ -22,6 +23,7 @@ def init_llama():
     n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
     n_ctx = int(os.environ.get("N_CTX", 2048))
     llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    loaded_model_name = cached[0]
     print(f"Initialized llama.cpp instance with {cached[0]}.")
 
 
@@ -32,12 +34,12 @@ def load_model_from_store():
     Receive a model file from the model store server.
     Store in memory or disk, then load into GPU via llama.cpp.
     """
-    global llm
+    global llm, loaded_model_name
     model_name = request.headers.get("X-Model-Name")
     if not model_name:
         return jsonify({"error": "X-Model-Name header required"}), 400
 
-    # We should check if it already exists here no? 
+    # We should check if it already exists here no?
     
     os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
     model_path = os.path.join(MODEL_CACHE_DIR, model_name)
@@ -50,6 +52,7 @@ def load_model_from_store():
     n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
     n_ctx = int(os.environ.get("N_CTX", 2048))
     llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    loaded_model_name = model_name
     print(f"Loaded {model_name} into GPU.")
 
     return jsonify({"status": "loaded", "model": model_name})
@@ -61,10 +64,10 @@ def load_model_from_cache():
     Receive a model name from the model store server.
     Load the already-cached model into GPU via llama.cpp.
     """
-    global llm
+    global llm, loaded_model_name
     model_name = request.headers.get("X-Model-Name")
     if not model_name:
-        return jsonify({"error": "X-Model-Name header required"}), 400 
+        return jsonify({"error": "X-Model-Name header required"}), 400
     model_path = os.path.join(MODEL_CACHE_DIR, model_name)
     
     # Makes sure you don't load a model that isn't actually there
@@ -74,10 +77,11 @@ def load_model_from_cache():
 
     n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
     n_ctx = int(os.environ.get("N_CTX", 2048))
-    llm = Llama(model_path=model_path,n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    loaded_model_name = model_name
     print(f"Loaded {model_name} into GPU.")
-    
-    return jsonify({"status" : "loaded", "model": model_name})
+
+    return jsonify({"status": "loaded", "model": model_name})
     
 
 @app.route("/cache_model", methods=["POST"])
@@ -99,6 +103,30 @@ def cache_model():
             f.write(chunk)
 
     return jsonify({"status": "cached", "path": model_path})
+
+
+@app.route("/infer", methods=["POST"])
+def infer():
+    global llm, loaded_model_name
+    body = request.get_json(force=True)
+    prompt = body.get("prompt")
+    model = body.get("model")
+
+    if not prompt:
+        return jsonify({"error": "prompt required"}), 400
+    if llm is None:
+        return jsonify({"error": "no model loaded"}), 503
+    if model and model != loaded_model_name:
+        return jsonify({"error": "model mismatch", "loaded": loaded_model_name, "requested": model}), 409
+
+    max_tokens = body.get("max_tokens", 512)
+
+    def generate():
+        for chunk in llm(prompt, max_tokens=max_tokens, stream=True):
+            token = chunk["choices"][0]["text"]
+            yield token
+
+    return Response(stream_with_context(generate()), mimetype="text/plain")
 
 
 if __name__ == "__main__":

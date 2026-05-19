@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 import config
 import worker_client
 from state import worker
@@ -48,15 +48,12 @@ def user_request():
 
     log_extra = f" evicted={evicted}" if evicted else ""
     print(f"[/user_request] model={model} action={cache_action} cached={list(worker.cached)}{log_extra}")
-    
-    return jsonify({
-        "status": "would_infer",
-        "model" : model,
-        "worker": worker.url,
-        "cache_action": cache_action,
-        "evicted" : evicted,
-        "prompt": prompt,
-    })
+
+    max_tokens = body.get("max_tokens", 512)
+    return Response(
+        stream_with_context(worker_client.infer(worker, prompt, model, max_tokens)),
+        mimetype="text/plain",
+    )
 
 if __name__ == "__main__":
       app.run(host="0.0.0.0", port=8000)
