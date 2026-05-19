@@ -33,9 +33,11 @@ cd inference_worker
 uv run inference_worker.py
 ```
 
+Models live in /inference_worker/model_cache
+
 The server listens on `0.0.0.0:8080` by default.
 
-## Sample Requests
+## Sample Inference Worker Requests
 
 ### Cache a model
 ```bash
@@ -52,3 +54,31 @@ curl -X POST http://localhost:8080/load_model_from_store \
   -H "Transfer-Encoding: chunked" \
   --data-binary @- < /path/to/my-model.gguf
 ```
+
+## Sample Model Swap Server
+
+### Send inference request
+```bash
+curl -X POST http://localhost:8000/user_request \      
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Explain transformers in one sentence.", "model": "ggml-org_models_tinyllamas_stories15M-q4_0.gguf"}'
+```
+
+## Running Model Server
+```bash
+cd model_swap_server 
+
+uv run model_swap_server.py
+```
+
+Models live in /model_swap_server/models
+
+The server listens on `0.0.0.0:8000` by default.
+
+## End to end example on a single machine
+
+Run inference worker in one window
+
+Run model swap server in another window
+
+Send an inference request to the model swap server.
