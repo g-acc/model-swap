@@ -16,3 +16,5 @@ inference_worker/model_cache/
 .DS_Store
 .idea/
 .vscode/
+
+**/pyrightconfig.json

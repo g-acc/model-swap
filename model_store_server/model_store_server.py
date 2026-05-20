@@ -16,6 +16,7 @@ print(f"  MODELS_DIR: {config.MODELS_DIR}")
 print(f"  Available models: {available_models}")
 print(f"  Worker URL: {config.WORKER_URL}")
 
+
 @app.route("/user_request", methods=["POST"])
 def user_request():
     body = request.get_json(silent=True) or {}
@@ -23,31 +24,32 @@ def user_request():
     model = body.get("model")
     if not isinstance(prompt, str) or not isinstance(model, str):
         return jsonify({"error": "prompt and model (strings) are required"}), 400
-    
+
     model_path = os.path.join(config.MODELS_DIR, model)
     if not os.path.isfile(model_path):
-        return jsonify({"error": "model not on store", 
-                        "model": model}), 404
+        return jsonify({"error": "model not on store", "model": model}), 404
 
-    evicted = None
+    evicted: list[str] = []
     if worker.loaded == model:
-        worker.touch(model)
+        worker.policy.access(model)
         cache_action = "already_loaded"
 
-    elif model in worker.cached:
+    elif worker.policy.contains(model):
         worker_client.load_from_cache(worker, model)
         worker.loaded = model
-        worker.touch(model)
+        worker.policy.access(model)
         cache_action = "load_from_cache"
 
     else:
         worker_client.load_from_store(worker, model, model_path)
-        evicted = worker.add_to_cache(model)
+        evicted = worker.policy.admit(model)
         worker.loaded = model
         cache_action = "load_from_store"
 
     log_extra = f" evicted={evicted}" if evicted else ""
-    print(f"[/user_request] model={model} action={cache_action} cached={list(worker.cached)}{log_extra}")
+    print(
+        f"[/user_request] model={model} action={cache_action} cached={worker.policy.members()}{log_extra}"
+    )
 
     max_tokens = body.get("max_tokens", 512)
     return Response(
@@ -55,5 +57,6 @@ def user_request():
         mimetype="text/plain",
     )
 
+
 if __name__ == "__main__":
-      app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000)
