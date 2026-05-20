@@ -3,6 +3,8 @@ from collections import OrderedDict
 
 
 class CachePolicy(Protocol):
+    name: str
+
     def contains(self, key: str) -> bool: ...
     def access(self, key: str) -> None: ...
     def admit(self, key: str, size: int = 0, cost: float = 0.0) -> list[str]: ...
@@ -10,6 +12,8 @@ class CachePolicy(Protocol):
 
 
 class LRUPolicy:
+    name = "lru"
+
     def __init__(self, capacity: int):
         self.capacity = capacity
         self._cache: "OrderedDict[str, None]" = OrderedDict()
