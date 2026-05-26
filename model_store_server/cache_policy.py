@@ -109,6 +109,42 @@ class TTLPolicy:
         return list(self._cache.keys())
 
 
+class LRUTTLPolicy:
+    name = "lru-ttl"
+
+    def __init__(self, capacity: int, ttl_seconds: float):
+        self.capacity = capacity
+        self.ttl_seconds = ttl_seconds
+        self._cache: "OrderedDict[str, float]" = OrderedDict()  # key -> last_access_time
+
+    def sweep(self) -> list[str]:
+        now = time.monotonic()
+        expired = [k for k, t in self._cache.items() if now - t > self.ttl_seconds]
+        for k in expired:
+            del self._cache[k]
+        return expired
+
+    def contains(self, key: str) -> bool:
+        return key in self._cache
+
+    def access(self, key: str) -> None:
+        if key in self._cache:
+            self._cache[key] = time.monotonic()
+            self._cache.move_to_end(key)
+
+    def admit(self, key: str, size: int = 0, cost: float = 0.0) -> AdmitResult:
+        self._cache[key] = time.monotonic()
+        self._cache.move_to_end(key)
+        evicted: list[str] = []
+        if len(self._cache) > self.capacity:
+            ev, _ = self._cache.popitem(last=False)
+            evicted.append(ev)
+        return AdmitResult(admitted=True, evicted=evicted)
+
+    def members(self) -> list[str]:
+        return list(self._cache.keys())
+
+
 def build_policy(name: str, capacity: int, ttl_seconds: float) -> CachePolicy:
     if name == "lru":
         return LRUPolicy(capacity=capacity)
@@ -116,4 +152,6 @@ def build_policy(name: str, capacity: int, ttl_seconds: float) -> CachePolicy:
         return NoEvictionPolicy(capacity=capacity)
     if name == "ttl":
         return TTLPolicy(ttl_seconds=ttl_seconds)
+    if name == "lru-ttl":
+        return LRUTTLPolicy(capacity=capacity, ttl_seconds=ttl_seconds)
     raise ValueError(f"unknown CACHE_POLICY: {name!r}")
