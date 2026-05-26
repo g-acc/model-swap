@@ -12,5 +12,9 @@ class WorkerState:
 
 worker = WorkerState(
     url=config.WORKER_URL,
-    policy=build_policy(config.CACHE_POLICY, capacity=config.MAX_CACHE_SIZE),
+    policy=build_policy(
+        config.CACHE_POLICY,
+        capacity=config.MAX_CACHE_SIZE,
+        ttl_seconds=config.TTL_SECONDS,
+    ),
 )

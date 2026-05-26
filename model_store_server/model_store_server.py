@@ -32,7 +32,7 @@ def user_request():
         return jsonify({"error": "model not on store", "model": model}), 404
 
     t0 = time.perf_counter()
-    evicted: list[str] = []
+    evicted: list[str] = worker.policy.sweep()
     worker_ms: float | None = None
     cache_action: str
 
@@ -63,7 +63,7 @@ def user_request():
                             "model": model,
                             "cached": worker.policy.members()}), 503
 
-        evicted = result.evicted
+        evicted = evicted + result.evicted
         t_w = time.perf_counter()
         worker_client.load_from_store(worker, model, model_path)
         worker_ms = (time.perf_counter() - t_w) * 1000

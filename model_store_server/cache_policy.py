@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 from collections import OrderedDict
+import time
 
 
 @dataclass
@@ -12,6 +13,7 @@ class AdmitResult:
 class CachePolicy(Protocol):
     name: str
 
+    def sweep(self) -> list[str]: ...
     def contains(self, key: str) -> bool: ...
     def access(self, key: str) -> None: ...
     def admit(self, key: str, size: int = 0, cost: float = 0.0) -> AdmitResult: ...
@@ -24,6 +26,9 @@ class LRUPolicy:
     def __init__(self, capacity: int):
         self.capacity = capacity
         self._cache: "OrderedDict[str, None]" = OrderedDict()
+
+    def sweep(self) -> list[str]:
+        return []
 
     def contains(self, key: str) -> bool:
         return key in self._cache
@@ -53,6 +58,9 @@ class NoEvictionPolicy:
         self._cache: set[str] = set()
         self._order: list[str] = []  # for stable members() ordering
 
+    def sweep(self) -> list[str]:
+        return []
+
     def contains(self, key: str) -> bool:
         return key in self._cache
 
@@ -72,9 +80,40 @@ class NoEvictionPolicy:
         return list(self._order)
 
 
-def build_policy(name: str, capacity: int) -> CachePolicy:
+class TTLPolicy:
+    name = "ttl"
+
+    def __init__(self, ttl_seconds: float):
+        self.ttl_seconds = ttl_seconds
+        self._cache: dict[str, float] = {}
+
+    def sweep(self) -> list[str]:
+        now = time.monotonic()
+        expired = [k for k, t in self._cache.items() if now - t > self.ttl_seconds]
+        for k in expired:
+            del self._cache[k]
+        return expired
+
+    def contains(self, key: str) -> bool:
+        return key in self._cache
+
+    def access(self, key: str) -> None:
+        if key in self._cache:
+            self._cache[key] = time.monotonic()
+
+    def admit(self, key: str, size: int = 0, cost: float = 0.0) -> AdmitResult:
+        self._cache[key] = time.monotonic()
+        return AdmitResult(admitted=True)
+
+    def members(self) -> list[str]:
+        return list(self._cache.keys())
+
+
+def build_policy(name: str, capacity: int, ttl_seconds: float) -> CachePolicy:
     if name == "lru":
         return LRUPolicy(capacity=capacity)
     if name == "no-evict":
         return NoEvictionPolicy(capacity=capacity)
+    if name == "ttl":
+        return TTLPolicy(ttl_seconds=ttl_seconds)
     raise ValueError(f"unknown CACHE_POLICY: {name!r}")
