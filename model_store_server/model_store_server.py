@@ -1,9 +1,9 @@
 import os
+import time
 from flask import Flask, request, jsonify, Response, stream_with_context
 import config
 import worker_client
 from state import worker
-import time
 
 app = Flask(__name__)
 
@@ -16,6 +16,7 @@ print("Model Store Server")
 print(f"  MODELS_DIR: {config.MODELS_DIR}")
 print(f"  Available models: {available_models}")
 print(f"  Worker URL: {config.WORKER_URL}")
+print(f"  Cache policy: {worker.policy.name} (capacity={config.MAX_CACHE_SIZE})")
 
 
 @app.route("/user_request", methods=["POST"])
@@ -33,6 +34,7 @@ def user_request():
     t0 = time.perf_counter()
     evicted: list[str] = []
     worker_ms: float | None = None
+    cache_action: str
 
     if worker.loaded == model:
         worker.policy.access(model)
@@ -47,10 +49,24 @@ def user_request():
         cache_action = "load_from_cache"
 
     else:
+        result = worker.policy.admit(model)
+        if not result.admitted:
+            cache_action = "rejected"
+            decision_ms = (time.perf_counter() - t0) * 1000
+            print(
+                f"[/user_request] ts={time.time():.3f} "
+                f"policy={worker.policy.name} model={model} action={cache_action} "
+                f"decision_ms={decision_ms:.2f} worker_ms=0.0 "
+                f"cached={worker.policy.members()} evicted=[]"
+            )
+            return jsonify({"error": "cache full, policy refuses eviction",
+                            "model": model,
+                            "cached": worker.policy.members()}), 503
+
+        evicted = result.evicted
         t_w = time.perf_counter()
         worker_client.load_from_store(worker, model, model_path)
         worker_ms = (time.perf_counter() - t_w) * 1000
-        evicted = worker.policy.admit(model)
         worker.loaded = model
         cache_action = "load_from_store"
 

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import config
-from cache_policy import CachePolicy, LRUPolicy
+from cache_policy import CachePolicy, build_policy
 
 
 @dataclass
@@ -12,5 +12,5 @@ class WorkerState:
 
 worker = WorkerState(
     url=config.WORKER_URL,
-    policy=LRUPolicy(capacity=config.MAX_CACHE_SIZE),
+    policy=build_policy(config.CACHE_POLICY, capacity=config.MAX_CACHE_SIZE),
 )
