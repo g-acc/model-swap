@@ -1,4 +1,5 @@
 import os
+import time
 from flask import Flask, request, jsonify, Response, stream_with_context
 import config
 import worker_client
@@ -15,6 +16,8 @@ print("Model Store Server")
 print(f"  MODELS_DIR: {config.MODELS_DIR}")
 print(f"  Available models: {available_models}")
 print(f"  Worker URL: {config.WORKER_URL}")
+print(f"  Cache policy: {worker.policy.name} (capacity={config.MAX_CACHE_SIZE})")
+
 
 @app.route("/user_request", methods=["POST"])
 def user_request():
@@ -23,31 +26,59 @@ def user_request():
     model = body.get("model")
     if not isinstance(prompt, str) or not isinstance(model, str):
         return jsonify({"error": "prompt and model (strings) are required"}), 400
-    
+
     model_path = os.path.join(config.MODELS_DIR, model)
     if not os.path.isfile(model_path):
-        return jsonify({"error": "model not on store", 
-                        "model": model}), 404
+        return jsonify({"error": "model not on store", "model": model}), 404
 
-    evicted = None
+    t0 = time.perf_counter()
+    evicted: list[str] = worker.policy.sweep()
+    worker_ms: float | None = None
+    cache_action: str
+
     if worker.loaded == model:
-        worker.touch(model)
+        worker.policy.access(model)
         cache_action = "already_loaded"
 
-    elif model in worker.cached:
+    elif worker.policy.contains(model):
+        t_w = time.perf_counter()
         worker_client.load_from_cache(worker, model)
+        worker_ms = (time.perf_counter() - t_w) * 1000
         worker.loaded = model
-        worker.touch(model)
+        worker.policy.access(model)
         cache_action = "load_from_cache"
 
     else:
+        result = worker.policy.admit(model)
+        if not result.admitted:
+            cache_action = "rejected"
+            decision_ms = (time.perf_counter() - t0) * 1000
+            print(
+                f"[/user_request] ts={time.time():.3f} "
+                f"policy={worker.policy.name} model={model} action={cache_action} "
+                f"decision_ms={decision_ms:.2f} worker_ms=0.0 "
+                f"cached={worker.policy.members()} evicted=[]"
+            )
+            return jsonify({"error": "cache full, policy refuses eviction",
+                            "model": model,
+                            "cached": worker.policy.members()}), 503
+
+        evicted = evicted + result.evicted
+        t_w = time.perf_counter()
         worker_client.load_from_store(worker, model, model_path)
-        evicted = worker.add_to_cache(model)
+        worker_ms = (time.perf_counter() - t_w) * 1000
         worker.loaded = model
         cache_action = "load_from_store"
 
-    log_extra = f" evicted={evicted}" if evicted else ""
-    print(f"[/user_request] model={model} action={cache_action} cached={list(worker.cached)}{log_extra}")
+    decision_ms = (time.perf_counter() - t0) * 1000 - (worker_ms or 0)
+    worker_ms_str = f"{worker_ms:.1f}" if worker_ms is not None else "0.0"
+
+    print(
+        f"[/user_request] ts={time.time():.3f} "
+        f"policy={worker.policy.name} model={model} action={cache_action} "
+        f"decision_ms={decision_ms:.2f} worker_ms={worker_ms_str} "
+        f"cached={worker.policy.members()} evicted={evicted}"
+    )
 
     max_tokens = body.get("max_tokens", 512)
     return Response(
@@ -55,5 +86,6 @@ def user_request():
         mimetype="text/plain",
     )
 
+
 if __name__ == "__main__":
-      app.run(host="0.0.0.0", port=8000)
+    app.run(host="0.0.0.0", port=8000)
