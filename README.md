@@ -77,8 +77,9 @@ The server listens on `0.0.0.0:8000` by default.
 
 ## End to end example on a single machine
 
-Run inference worker in one window
+Run inference worker in one terminal.
 
-Run model swap server in another window
+Run model swap server in another terminal.
+Be sure to have models available in /model_store_server/models.
 
 Send an inference request to the model swap server.
