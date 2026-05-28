@@ -133,6 +133,11 @@ Four shell scripts at the repo root exercise each cache policy. Before
 running, set the matching `CACHE_POLICY` (and `MAX_CACHE_SIZE` / `TTL_SECONDS`)
 in `model_store_server/config.py` and restart the store server.
 
+Make sure the correct models are in the model store server:
+- tinygemma3.gguf: https://huggingface.co/ggml-org/tinygemma3-GGUF/tree/main
+- SmolLM2-135M-Instruct-Q8_0.gguf: https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/blob/main/SmolLM2-135M-Instruct-Q8_0.gguf
+- qwen2.5-0.5b-instruct-q4_k_m.gguf: https://huggingface.co/Growcompany/Qwen2.5-0.5B-Instruct-Q4_K_M-GGUF/tree/main
+
 | Script | Policy | What it checks |
 |--------|--------|----------------|
 | `./test_cache_smoke.sh` | `lru` | First miss, hit, fill, LRU eviction, re-load of evicted model |
