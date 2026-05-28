@@ -138,6 +138,8 @@ Make sure the correct models are in the model store server:
 - SmolLM2-135M-Instruct-Q8_0.gguf: https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/blob/main/SmolLM2-135M-Instruct-Q8_0.gguf
 - qwen2.5-0.5b-instruct-q4_k_m.gguf: https://huggingface.co/Growcompany/Qwen2.5-0.5B-Instruct-Q4_K_M-GGUF/tree/main
 
+And be sure to delete the inference_worker's model cache between runs!
+
 | Script | Policy | What it checks |
 |--------|--------|----------------|
 | `./test_cache_smoke.sh` | `lru` | First miss, hit, fill, LRU eviction, re-load of evicted model |
