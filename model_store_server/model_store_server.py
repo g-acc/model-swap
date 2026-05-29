@@ -42,11 +42,11 @@ def user_request():
 
     elif worker.policy.contains(model):
         t_w = time.perf_counter()
-        worker_client.load_from_cache(worker, model)
+        worker_client.load_from_local_store(worker, model)
         worker_ms = (time.perf_counter() - t_w) * 1000
         worker.loaded = model
         worker.policy.access(model)
-        cache_action = "load_from_cache"
+        cache_action = "load_from_local_store"
 
     else:
         result = worker.policy.admit(model)
@@ -65,7 +65,7 @@ def user_request():
 
         evicted = evicted + result.evicted
         t_w = time.perf_counter()
-        worker_client.load_from_store(worker, model, model_path)
+        worker_client.send_model(worker, model, model_path, "load_model_from_store")
         worker_ms = (time.perf_counter() - t_w) * 1000
         worker.loaded = model
         cache_action = "load_from_store"

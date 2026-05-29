@@ -15,7 +15,7 @@ A Flask HTTP server that manages model loading and caching for llama.cpp-based i
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/load_model_from_store` | Receive a model file from the model store, store it, and load it into GPU |
-| POST | `/load_model_from_cache` | Load an already-cached model into GPU by name |
+| POST | `/load_model_from_local_store` | Load an already-cached model into GPU by name |
 | POST | `/cache_model` | Receive a model file from the model store and cache it without loading into GPU |
 | POST | `/user_request` | Accepts `{prompt, model, max_tokens}`. Ensures `model` is loaded on the worker, then streams the worker's inference response back to the client |
 
@@ -30,6 +30,10 @@ A Flask HTTP server that manages model loading and caching for llama.cpp-based i
 | `MAX_CACHE_SIZE` | `2` | Max models tracked in the worker's on-disk cache (used by `lru`, `no-evict`, `lru-ttl`) |
 | `TTL_SECONDS` | `5` | Stale-entry timeout in seconds (used by `ttl`, `lru-ttl`) |
 | `CACHE_POLICY` | `"lru"` | One of `lru`, `no-evict`, `ttl`, `lru-ttl` |
+| `TRANSPORT` | `"http"` | `http` or `rdma`. Selects how model bytes reach the worker. |
+| `ALLOW_FALLBACK` | `0` | If `1`, a failed RDMA send retries over HTTP. |
+| `WORKER_RDMA_HOST` | `"localhost"` | Worker hostname for the RDMA endpoint. |
+| `WORKER_RDMA_PORT` | `8081` | Worker port for the RDMA listener. |
 
 ## Cache policies
 
@@ -46,7 +50,7 @@ Every `/user_request` log line on the store server reports which policy was acti
 [/user_request] ts=... policy=lru-ttl model=qwen.gguf action=load_from_store decision_ms=0.02 worker_ms=459.2 cached=[...] evicted=[...]
 ```
 
-Possible `action` values: `already_loaded`, `load_from_cache`, `load_from_store`, `rejected` (`no-evict` only).
+Possible `action` values: `already_loaded`, `load_from_local_store`, `load_from_store`, `rejected` (`no-evict` only).
 
 ## Setup
 
