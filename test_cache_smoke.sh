@@ -33,19 +33,22 @@ post() {
   echo "[http $http | tcp_connect=${connect}s  time_to_first_byte=${ttfb}s  generation=${gen}s  total=${total}s | throughput=~${tps} bytes/s]"
 }
 
-post "1. baseline                 -> expect: load_from_store, cached=[tinygemma3]" \
+echo "--- resetting server cache ---"
+curl -sSf -X POST "${STORE_URL}/admin/reset" -o /dev/null && echo "cache cleared." || echo "WARNING: reset failed."
+
+post "1. load tinygemma3 (45M)         -> expect: load_from_store, cached=[tinygemma3 (45M)]" \
      "tinygemma3.gguf"
 
-post "2. repeat                   -> expect: already_loaded" \
+post "2. repeat tinygemma3 (45M)       -> expect: already_loaded" \
      "tinygemma3.gguf"
 
-post "3. second model             -> expect: load_from_store, cached=[tinygemma3, SmolLM2]" \
+post "3. load smollm2 (135M)           -> expect: load_from_store, cached=[tinygemma3 (45M), smollm2 (135M)]" \
      "SmolLM2-135M-Instruct-Q8_0.gguf"
 
-post "4. third model (evict LRU)  -> expect: load_from_store, evicted=[tinygemma3]" \
+post "4. load qwen2.5 (0.5B) (LRU)    -> expect: load_from_store, evicted=[tinygemma3 (45M)]" \
      "qwen2.5-0.5b-instruct-q4_k_m.gguf"
 
-post "5. re-load evicted          -> expect: load_from_store, evicted=[SmolLM2]" \
+post "5. reload tinygemma3 (45M)       -> expect: load_from_store, evicted=[smollm2 (135M)]" \
      "tinygemma3.gguf"
 
 echo

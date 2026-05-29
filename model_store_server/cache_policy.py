@@ -18,6 +18,7 @@ class CachePolicy(Protocol):
     def access(self, key: str) -> None: ...
     def admit(self, key: str, size: int = 0, cost: float = 0.0) -> AdmitResult: ...
     def members(self) -> list[str]: ...
+    def clear(self) -> None: ...
 
 
 class LRUPolicy:
@@ -49,6 +50,9 @@ class LRUPolicy:
     def members(self) -> list[str]:
         return list(self._cache.keys())
 
+    def clear(self) -> None:
+        self._cache.clear()
+
 
 class NoEvictionPolicy:
     name = "no-evict"
@@ -79,6 +83,10 @@ class NoEvictionPolicy:
     def members(self) -> list[str]:
         return list(self._order)
 
+    def clear(self) -> None:
+        self._cache.clear()
+        self._order.clear()
+
 
 class TTLPolicy:
     name = "ttl"
@@ -107,6 +115,9 @@ class TTLPolicy:
 
     def members(self) -> list[str]:
         return list(self._cache.keys())
+
+    def clear(self) -> None:
+        self._cache.clear()
 
 
 class LRUTTLPolicy:
@@ -143,6 +154,9 @@ class LRUTTLPolicy:
 
     def members(self) -> list[str]:
         return list(self._cache.keys())
+
+    def clear(self) -> None:
+        self._cache.clear()
 
 
 def build_policy(name: str, capacity: int, ttl_seconds: float) -> CachePolicy:

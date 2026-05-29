@@ -1,0 +1,26 @@
+--- resetting server cache ---
+curl: (22) The requested URL returned error: 404
+WARNING: reset failed.
+
+=== 1. load tinygemma3 (45M)         -> expect: load_from_store, cached=[tinygemma3 (45M)] ===
+ Malone쉬쉬쉬쉬쉬쉬쉬
+[http 200 | tcp_connect=0.000256s  time_to_first_byte=0.200837s  generation=0.016s  total=0.217293s | throughput=~1750.0 bytes/s]
+
+=== 2. repeat tinygemma3 (45M)       -> expect: already_loaded ===
+mouseupmouseupmouseupmouseupmouseupmouseupSTRING
+[http 200 | tcp_connect=0.000218s  time_to_first_byte=0.009634s  generation=0.012s  total=0.021720s | throughput=~4000.0 bytes/s]
+
+=== 3. load smollm2 (135M)           -> expect: load_from_store, cached=[tinygemma3 (45M), smollm2 (135M)] ===
+ are not necessarily related to each other.
+[http 200 | tcp_connect=0.000271s  time_to_first_byte=0.123515s  generation=0.022s  total=0.145052s | throughput=~1954.5 bytes/s]
+
+=== 4. load qwen2.5 (0.5B) (LRU)    -> expect: load_from_store, evicted=[tinygemma3 (45M)] ===
+-breaking
+The phrase "breaking the rules
+[http 200 | tcp_connect=0.000262s  time_to_first_byte=0.428941s  generation=0.030s  total=0.459104s | throughput=~1333.3 bytes/s]
+
+=== 5. reload tinygemma3 (45M)       -> expect: load_from_store, evicted=[smollm2 (135M)] ===
+ Malone쉬쉬쉬쉬쉬쉬쉬
+[http 200 | tcp_connect=0.000202s  time_to_first_byte=0.187580s  generation=0.015s  total=0.202285s | throughput=~1866.7 bytes/s]
+
+=== done. check server log for action= and evicted= values ===
