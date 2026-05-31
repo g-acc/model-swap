@@ -87,5 +87,12 @@ def user_request():
     )
 
 
+@app.route("/admin/reset", methods=["POST"])
+def admin_reset():
+    worker.policy.clear()
+    worker.loaded = None
+    return jsonify({"status": "reset"})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)

@@ -1,0 +1,26 @@
+--- resetting server cache ---
+curl: (22) The requested URL returned error: 404
+WARNING: reset failed.
+
+=== 1. load tinygemma3 (45M)         -> expect: load_from_store, cached=[tinygemma3 (45M)] ===
+mouseupmouseupmouseupmouseupmouseupmouseupSTRING
+[http 200 | tcp_connect=0.000303s  time_to_first_byte=0.020700s  generation=0.013s  total=0.033930s | throughput=~3692.3 bytes/s]
+
+=== 2. repeat tinygemma3 (45M)       -> expect: already_loaded ===
+ gwenvironmental orangehnenellus kudos Furtherikkh
+[http 200 | tcp_connect=0.000242s  time_to_first_byte=0.010039s  generation=0.015s  total=0.024602s | throughput=~3333.3 bytes/s]
+
+=== 3. load smollm2 (135M)           -> expect: load_from_store, cached=[tinygemma3 (45M), smollm2 (135M)] ===
+ are not necessarily related to each other.
+[http 200 | tcp_connect=0.000227s  time_to_first_byte=0.106714s  generation=0.021s  total=0.127836s | throughput=~2047.6 bytes/s]
+
+=== 4. load qwen2.5 (0.5B) (FULL)   -> expect: 503 rejected, cached unchanged ===
+-breaking
+The phrase "breaking the rules
+[http 200 | tcp_connect=0.000220s  time_to_first_byte=0.237862s  generation=0.029s  total=0.266778s | throughput=~1379.3 bytes/s]
+
+=== 5. repeat tinygemma3 (45M)       -> expect: already_loaded, still 200 ===
+ Malone쉬쉬쉬쉬쉬쉬쉬
+[http 200 | tcp_connect=0.000216s  time_to_first_byte=0.180982s  generation=0.019s  total=0.199944s | throughput=~1473.7 bytes/s]
+
+=== done. step 2 shows already_loaded speedup; check server log for action=rejected on step 4 ===

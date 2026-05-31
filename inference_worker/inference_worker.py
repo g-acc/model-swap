@@ -1,4 +1,5 @@
 import os
+import time
 from flask import Flask, request, jsonify, Response, stream_with_context
 from llama_cpp import Llama
 
@@ -22,24 +23,27 @@ def init_llama():
         print(f"Multiple models in cache, loading first: {cached[0]}")
     n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
     n_ctx = int(os.environ.get("N_CTX", 2048))
+    t0 = time.perf_counter()
     llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
     loaded_model_name = cached[0]
-    print(f"Initialized llama.cpp instance with {cached[0]}.")
+    print(f"Initialized llama.cpp instance with {cached[0]} in {time.perf_counter() - t0:.2f}s.")
 
 
-def _receive_model(model_name: str) -> str:
-    """Write the incoming model file into the cache and return its path.
+def _receive_model(model_name: str) -> tuple[str, float]:
+    """Write the incoming model file into the cache; return (path, recv_seconds).
     HTTP carries the bytes in the request body. RDMA delivers them to disk via
     the listener before this handler runs, so there's nothing to read here.
     """
     os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
     model_path = os.path.join(MODEL_CACHE_DIR, model_name)
-    if request.headers.get("X-Transport") == "rdma":
-        return model_path
-    with open(model_path, "wb") as f:
-        while chunk := request.stream.read(1024 * 1024):  # 1MB chunks
-            f.write(chunk)
-    return model_path
+    t_recv = time.perf_counter()
+    if request.headers.get("X-Transport") != "rdma":
+        with open(model_path, "wb") as f:
+            while chunk := request.stream.read(1024 * 1024):  # 1MB chunks
+                f.write(chunk)
+    recv_s = time.perf_counter() - t_recv
+    print(f"Received {model_name} in {recv_s:.2f}s.")
+    return model_path, recv_s
 
 
 # From Remote Store Server
@@ -54,15 +58,17 @@ def load_model_from_store():
     if not model_name:
         return jsonify({"error": "X-Model-Name header required"}), 400
 
-    model_path = _receive_model(model_name)
+    model_path, recv_s = _receive_model(model_name)
 
     n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
     n_ctx = int(os.environ.get("N_CTX", 2048))
+    t_load = time.perf_counter()
     llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    load_s = time.perf_counter() - t_load
     loaded_model_name = model_name
-    print(f"Loaded {model_name} into GPU.")
+    print(f"Loaded {model_name} into GPU in {load_s:.2f}s.")
 
-    return jsonify({"status": "loaded", "model": model_name})
+    return jsonify({"status": "loaded", "model": model_name, "recv_s": round(recv_s, 3), "load_s": round(load_s, 3)})
 
 # Local Load
 @app.route("/load_model_from_local_store", methods=["POST"])
@@ -84,11 +90,13 @@ def load_model_from_local_store():
 
     n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
     n_ctx = int(os.environ.get("N_CTX", 2048))
+    t_load = time.perf_counter()
     llm = Llama(model_path=model_path, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx)
+    load_s = time.perf_counter() - t_load
     loaded_model_name = model_name
-    print(f"Loaded {model_name} into GPU.")
+    print(f"Loaded {model_name} into GPU in {load_s:.2f}s.")
 
-    return jsonify({"status": "loaded", "model": model_name})
+    return jsonify({"status": "loaded", "model": model_name, "load_s": round(load_s, 3)})
     
 
 @app.route("/cache_model", methods=["POST"])
@@ -101,7 +109,7 @@ def cache_model():
     if not model_name:
         return jsonify({"error": "X-Model-Name header required"}), 400
 
-    model_path = _receive_model(model_name)
+    model_path, _ = _receive_model(model_name)
 
     return jsonify({"status": "cached", "path": model_path})
 
@@ -123,9 +131,19 @@ def infer():
     max_tokens = body.get("max_tokens", 512)
 
     def generate():
+        t_start = time.perf_counter()
+        t_first = None
+        token_count = 0
         for chunk in llm(prompt, max_tokens=max_tokens, stream=True):
             token = chunk["choices"][0]["text"]
+            if t_first is None:
+                t_first = time.perf_counter()
+                print(f"[infer] TTFT: {t_first - t_start:.3f}s")
+            token_count += 1
             yield token
+        total_s = time.perf_counter() - t_start
+        tps = token_count / total_s if total_s > 0 else 0
+        print(f"[infer] tokens={token_count} total={total_s:.3f}s tps={tps:.1f}")
 
     return Response(stream_with_context(generate()), mimetype="text/plain")
 

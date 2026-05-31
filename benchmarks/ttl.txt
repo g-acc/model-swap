@@ -1,0 +1,32 @@
+--- resetting server cache ---
+curl: (22) The requested URL returned error: 404
+WARNING: reset failed.
+
+=== 1. load tinygemma3 (45M)         -> expect: load_from_store, cached=[tinygemma3 (45M)] ===
+mouseupmouseupmouseupmouseupmouseupmouseupSTRING
+[http 200 | tcp_connect=0.000273s  time_to_first_byte=0.019913s  generation=0.014s  total=0.034121s | throughput=~3428.6 bytes/s]
+
+=== 2. repeat tinygemma3 (45M)       -> expect: already_loaded ===
+ gwenvironmental orangehnenellus kudos Furtherikkh
+[http 200 | tcp_connect=0.000245s  time_to_first_byte=0.009409s  generation=0.017s  total=0.026116s | throughput=~2941.2 bytes/s]
+
+=== 3. load smollm2 (135M)           -> expect: load_from_store, cached=[tinygemma3 (45M), smollm2 (135M)] ===
+ are not necessarily related to each other.
+[http 200 | tcp_connect=0.000241s  time_to_first_byte=0.107570s  generation=0.023s  total=0.130310s | throughput=~1869.6 bytes/s]
+
+=== 4. access tinygemma3 (45M)       -> expect: load_from_cache (still warm) ===
+<!doctype html>
+<html lang=en>
+<title>500 Internal Server Error</title>
+<h1>Internal Server Error</h1>
+<p>The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.</p>
+[http 500 | tcp_connect=0.000200s  time_to_first_byte=0.005933s  generation=0.000s  total=0.005946s | throughput=~n/a bytes/s]
+
+--- sleeping 7s to exceed TTL_SECONDS=5 ---
+
+=== 5. load qwen2.5 (0.5B) after TTL -> expect: load_from_store, evicted=[tinygemma3 (45M), smollm2 (135M)] ===
+-breaking
+The phrase "breaking the rules
+[http 200 | tcp_connect=0.000545s  time_to_first_byte=0.277721s  generation=0.030s  total=0.307948s | throughput=~1333.3 bytes/s]
+
+=== done. step 2 shows already_loaded speedup; step 5's log should show evicted=[tinygemma3 (45M), smollm2 (135M)] from TTL sweep ===

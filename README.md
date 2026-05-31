@@ -76,7 +76,7 @@ uv run inference_worker.py
 
 Models live in `/inference_worker/model_cache`.
 
-The server listens on `0.0.0.0:8080` by default.
+The inference worker listens on `0.0.0.0:8080` by default.
 
 ## Sample Inference Worker Requests
 
@@ -118,7 +118,7 @@ uv run model_store_server.py
 
 Models live in `/model_store_server/models`.
 
-The server listens on `0.0.0.0:8000` by default.
+The model swap server listens on `0.0.0.0:8000` by default.
 
 ## End to end example on a single machine
 
@@ -137,6 +137,13 @@ Four shell scripts at the repo root exercise each cache policy. Before
 running, set the matching `CACHE_POLICY` (and `MAX_CACHE_SIZE` / `TTL_SECONDS`)
 in `model_store_server/config.py` and restart the store server.
 
+Make sure the correct models are in the model store server:
+- tinygemma3.gguf: https://huggingface.co/ggml-org/tinygemma3-GGUF/tree/main
+- SmolLM2-135M-Instruct-Q8_0.gguf: https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/blob/main/SmolLM2-135M-Instruct-Q8_0.gguf
+- qwen2.5-0.5b-instruct-q4_k_m.gguf: https://huggingface.co/Growcompany/Qwen2.5-0.5B-Instruct-Q4_K_M-GGUF/tree/main
+
+And be sure to delete the inference_worker's model cache between runs!
+
 | Script | Policy | What it checks |
 |--------|--------|----------------|
 | `./test_cache_smoke.sh` | `lru` | First miss, hit, fill, LRU eviction, re-load of evicted model |
@@ -145,3 +152,54 @@ in `model_store_server/config.py` and restart the store server.
 | `./test_lru_ttl_smoke.sh` | `lru-ttl` (set `MAX_CACHE_SIZE=2`, `TTL_SECONDS=5`) | Both eviction paths fire: capacity-based then time-based |
 
 Override the default endpoint with `STORE_URL=http://host:8000 ./test_*.sh`.
+
+Each step prints a timing summary line:
+```
+[http 200 | tcp_connect=0.000s  time_to_first_byte=0.208s  generation=0.030s  total=0.238s | throughput=~933 bytes/s]
+```
+
+- **tcp_connect** — TCP handshake time; negligible on localhost, non-zero in multi-node deployments
+- **time_to_first_byte** — dominated by model load/swap when a cache miss occurs; near-zero on `already_loaded` hits
+- **generation** — time spent streaming the response tokens (`total - time_to_first_byte`)
+- **throughput** — bytes per second during generation (~4× for approximate tokens/sec on English text)
+
+The inference worker also logs per-request metrics to its console:
+```
+[infer] TTFT: 0.045s
+[infer] tokens=8 total=0.075s tps=106.7
+```
+
+## Benchmarks
+
+`benchmarks/plot_run.py` parses smoke test output and renders a stacked bar chart showing the timing breakdown (tcp_connect / time_to_first_byte / generation) for each step, colored by cache action.
+
+No install needed — `uv` handles the `matplotlib` dependency automatically.
+
+### Generate a chart
+
+Pipe a smoke test directly:
+```bash
+./test_cache_smoke.sh 2>&1 | uv run benchmarks/plot_run.py --title "LRU policy"
+# → saves benchmarks/smoke_bench.png
+```
+
+Save output first, then plot:
+```bash
+./test_ttl_smoke.sh 2>&1 > benchmarks/ttl_run.txt
+uv run benchmarks/plot_run.py benchmarks/ttl_run.txt
+# → saves benchmarks/ttl_run.png
+```
+
+Explicit output path:
+```bash
+./test_lru_ttl_smoke.sh 2>&1 | uv run benchmarks/plot_run.py --title "LRU+TTL" -o benchmarks/lru_ttl.png
+```
+
+### Color key
+
+| Color | Cache action |
+|-------|-------------|
+| Orange | `load_from_store` — model fetched from store and loaded into GPU |
+| Blue | `load_from_cache` — model already on disk, loaded into GPU |
+| Green | `already_loaded` — no swap needed |
+| Gray | `rejected` — cache full, request denied (no-evict policy) |

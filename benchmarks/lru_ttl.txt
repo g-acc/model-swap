@@ -1,0 +1,28 @@
+--- resetting server cache ---
+curl: (22) The requested URL returned error: 404
+WARNING: reset failed.
+
+=== 1. load tinygemma3 (45M)         -> expect: load_from_store, cached=[tinygemma3 (45M)] ===
+ Malone쉬쉬쉬쉬쉬쉬쉬
+[http 200 | tcp_connect=0.000245s  time_to_first_byte=0.191068s  generation=0.020s  total=0.211191s | throughput=~1400.0 bytes/s]
+
+=== 2. repeat tinygemma3 (45M)       -> expect: already_loaded ===
+mouseupmouseupmouseupmouseupmouseupmouseupSTRING
+[http 200 | tcp_connect=0.000216s  time_to_first_byte=0.009979s  generation=0.012s  total=0.021815s | throughput=~4000.0 bytes/s]
+
+=== 3. load smollm2 (135M)           -> expect: load_from_store, cached=[tinygemma3 (45M), smollm2 (135M)] ===
+ are not necessarily related to each other.
+[http 200 | tcp_connect=0.000203s  time_to_first_byte=0.134276s  generation=0.022s  total=0.156709s | throughput=~1954.5 bytes/s]
+
+=== 4. load qwen2.5 (0.5B) (LRU)    -> expect: load_from_store, evicted=[tinygemma3 (45M)] ===
+-breaking
+The phrase "breaking the rules
+[http 200 | tcp_connect=0.000208s  time_to_first_byte=0.386763s  generation=0.030s  total=0.416472s | throughput=~1333.3 bytes/s]
+
+--- sleeping 7s to exceed TTL_SECONDS=5 ---
+
+=== 5. load llama3.2 (1B) (TTL)      -> expect: load_from_store, evicted=[smollm2 (135M), qwen2.5 (0.5B)] ===
+{"error":"model not on store","model":"llama-3.2-1b-instruct-q4_0.gguf"}
+[http 404 | tcp_connect=0.000532s  time_to_first_byte=0.001796s  generation=0.000s  total=0.001815s | throughput=~n/a bytes/s]
+
+=== done. step 2 shows already_loaded speedup; step 4 shows LRU eviction; step 5 shows TTL sweep ===
