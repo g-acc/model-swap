@@ -7,10 +7,10 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = None  # no size limit for large model files
 
 MODEL_CACHE_DIR = "./model_cache"
+RDMA_PORT = int(os.environ.get("RDMA_PORT", 8081))
 
 llm: Llama | None = None
 loaded_model_name: str | None = None
-
 
 def init_llama():
     global llm, loaded_model_name
@@ -29,7 +29,24 @@ def init_llama():
     print(f"Initialized llama.cpp instance with {cached[0]} in {time.perf_counter() - t0:.2f}s.")
 
 
-# From Remote Store Server 
+def _receive_model(model_name: str) -> tuple[str, float]:
+    """Write the incoming model file into the cache; return (path, recv_seconds).
+    HTTP carries the bytes in the request body. RDMA delivers them to disk via
+    the listener before this handler runs, so there's nothing to read here.
+    """
+    os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
+    model_path = os.path.join(MODEL_CACHE_DIR, model_name)
+    t_recv = time.perf_counter()
+    if request.headers.get("X-Transport") != "rdma":
+        with open(model_path, "wb") as f:
+            while chunk := request.stream.read(1024 * 1024):  # 1MB chunks
+                f.write(chunk)
+    recv_s = time.perf_counter() - t_recv
+    print(f"Received {model_name} in {recv_s:.2f}s.")
+    return model_path, recv_s
+
+
+# From Remote Store Server
 @app.route("/load_model_from_store", methods=["POST"])
 def load_model_from_store():
     """
@@ -41,18 +58,7 @@ def load_model_from_store():
     if not model_name:
         return jsonify({"error": "X-Model-Name header required"}), 400
 
-    # We should check if it already exists here no?
-    
-    os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
-    model_path = os.path.join(MODEL_CACHE_DIR, model_name)
-
-    t_recv = time.perf_counter()
-    with open(model_path, "wb") as f:
-        chunk_size = 1024 * 1024  # 1MB chunks
-        while chunk := request.stream.read(chunk_size):
-            f.write(chunk)
-    recv_s = time.perf_counter() - t_recv
-    print(f"Received {model_name} in {recv_s:.2f}s.")
+    model_path, recv_s = _receive_model(model_name)
 
     n_gpu_layers = int(os.environ.get("N_GPU_LAYERS", -1))
     n_ctx = int(os.environ.get("N_CTX", 2048))
@@ -65,8 +71,8 @@ def load_model_from_store():
     return jsonify({"status": "loaded", "model": model_name, "recv_s": round(recv_s, 3), "load_s": round(load_s, 3)})
 
 # Local Load
-@app.route("/load_model_from_cache", methods=["POST"])
-def load_model_from_cache():
+@app.route("/load_model_from_local_store", methods=["POST"])
+def load_model_from_local_store():
     """
     Receive a model name from the model store server.
     Load the already-cached model into GPU via llama.cpp.
@@ -103,13 +109,7 @@ def cache_model():
     if not model_name:
         return jsonify({"error": "X-Model-Name header required"}), 400
 
-    os.makedirs(MODEL_CACHE_DIR, exist_ok=True)
-    model_path = os.path.join(MODEL_CACHE_DIR, model_name)
-
-    with open(model_path, "wb") as f:
-        chunk_size = 1024 * 1024  # 1MB chunks
-        while chunk := request.stream.read(chunk_size):
-            f.write(chunk)
+    model_path, _ = _receive_model(model_name)
 
     return jsonify({"status": "cached", "path": model_path})
 
@@ -150,4 +150,7 @@ def infer():
 
 if __name__ == "__main__":
     init_llama()
+    if os.environ.get("RDMA_ENABLED"):
+        import rdma
+        rdma.start_listener(RDMA_PORT, MODEL_CACHE_DIR)
     app.run(host="0.0.0.0", port=8080)
