@@ -10,7 +10,6 @@ _listener = None
 
 def start_listener(port: int, cache_dir: str) -> None:
     """Run the UCX listener in a daemon thread with its own event loop."""
-    
 
     async def handle(ep):
         header = (await ep.recv_obj()).decode()
@@ -30,14 +29,22 @@ def start_listener(port: int, cache_dir: str) -> None:
 
         await ep.send_obj(b"ok")  # tell the sender the file is fully written
         await ep.close()
-        print(f"[rdma] received {model_name} ({size} bytes)")
+        print(f"[rdma] received {model_name} ({size} bytes)", flush=True)
 
     def run():
         global _listener
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        _listener = ucxx.create_listener(handle, port)
-        print(f"[rdma] listening on port {_listener.port}")
-        loop.run_forever()
+
+        async def serve():
+            # create_listener must run inside a live loop so ucxx attaches its
+            # progress engine; otherwise incoming connections never complete.
+            global _listener
+            _listener = ucxx.create_listener(handle, port)
+            print(f"[rdma] listening on port {_listener.port}", flush=True)
+            while True:
+                await asyncio.sleep(3600)
+
+        loop.run_until_complete(serve())
 
     threading.Thread(target=run, daemon=True).start()
